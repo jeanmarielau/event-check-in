@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Event Check-In Scanner</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  body { font-family: -apple-system, sans-serif; text-align: center; padding: 20px; background: #f4f4f4; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  #startBtn {
+    font-size: 18px; padding: 14px 28px; border-radius: 8px; border: none;
+    background: #2563eb; color: white; margin: 16px 0; cursor: pointer;
+  }
+  #reader { width: 320px; max-width: 90vw; margin: 0 auto; }
+  #result {
+    margin-top: 20px; padding: 16px; border-radius: 8px; font-size: 20px;
+    min-height: 30px; font-weight: bold;
+  }
+  .success { background: #dcfce7; color: #166534; }
+  .duplicate { background: #fef9c3; color: #854d0e; }
+  .error { background: #fee2e2; color: #991b1b; }
+</style>
+</head>
+<body>
+
+<h1>Event Check-In</h1>
+<p>Tap Start, then point the camera at each attendee's QR code.</p>
+<button id="startBtn">Start Scanning</button>
+<div id="reader"></div>
+<div id="result"></div>
+
+<script>
+// ⚠️ Paste your deployed Apps Script Web App URL here:
+const API_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
+
+const resultDiv = document.getElementById('result');
+let scanner;
+let scanning = false;
+let cooldown = false; // prevents double-scanning the same code rapidly
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  if (scanning) return;
+  scanning = true;
+  document.getElementById('startBtn').style.display = 'none';
+
+  scanner = new Html5Qrcode("reader");
+  scanner.start(
+    { facingMode: "environment" },   // rear camera
+    { fps: 10, qrbox: 250 },
+    onScanSuccess,
+    () => {} // ignore per-frame scan failures (normal while aiming)
+  ).catch(err => {
+    resultDiv.className = 'error';
+    resultDiv.textContent = 'Camera error: ' + err;
+  });
+});
+
+function onScanSuccess(decodedText) {
+  if (cooldown) return;
+  cooldown = true;
+
+  // decodedText is the full QR URL, e.g. https://.../exec?id=AA2026-0042
+  // extract the "id" parameter regardless of what the QR encodes:
+  let id;
+  try {
+    const url = new URL(decodedText);
+    id = url.searchParams.get('id') || decodedText;
+  } catch {
+    id = decodedText; // QR just contains the raw ID
+  }
+
+  resultDiv.className = '';
+  resultDiv.textContent = 'Checking in...';
+
+  fetch(`${API_URL}?id=${encodeURIComponent(id)}`)
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === 'success') {
+        resultDiv.className = 'success';
+        resultDiv.textContent = `✅ Welcome, ${data.name}!`;
+      } else if (data.status === 'duplicate') {
+        resultDiv.className = 'duplicate';
+        resultDiv.textContent = `⚠️ ${data.name} already checked in`;
+      } else {
+        resultDiv.className = 'error';
+        resultDiv.textContent = `❌ ID not found: ${id}`;
+      }
+    })
+    .catch(() => {
+      resultDiv.className = 'error';
+      resultDiv.textContent = '❌ Network error — check connection';
+    })
+    .finally(() => {
+      // brief pause so the volunteer can read the result, then resume scanning
+      setTimeout(() => { cooldown = false; }, 2000);
+    });
+}
+</script>
+
+</body>
+</html>
