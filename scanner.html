@@ -83,7 +83,7 @@ function onScanSuccess(decodedText) {
         resultDiv.className = 'duplicate';
         resultDiv.textContent = `⚠️ ${data.name} already checked in`;
       } else {
-        resultDiv.className = 'error';
+        resultDiv.className = 'notfound';
         resultDiv.textContent = `❌ ID not found: ${id}`;
       }
     })
